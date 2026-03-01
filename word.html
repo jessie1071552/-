@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOEIC単語帳</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+        }
+        #card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        /* カウンター周りのデザイン */
+        .counter-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .small-reset-btn {
+            background-color: #e2e3e5;
+            color: #333;
+            border: none;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .word { font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+        .phrase { font-size: 18px; color: #555; margin-bottom: 20px; }
+        .meaning { font-size: 22px; color: #d9534f; font-weight: bold; margin-bottom: 30px; display: none; }
+        
+        button {
+            font-size: 18px;
+            padding: 12px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            color: white;
+        }
+        #show-meaning-btn { background-color: #007bff; width: 100%; box-sizing: border-box; }
+        #knew-btn { background-color: #28a745; flex: 1; display: none; }
+        #unknew-btn { background-color: #dc3545; flex: 1; display: none; }
+        .action-buttons { display: flex; justify-content: space-between; gap: 10px; }
+        
+        #memo-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        #memo-input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        #list-view {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+            text-align: left;
+            display: none;
+        }
+        #list-view h2 { text-align: center; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; }
+        th { background-color: #f4f4f9; text-align: center; }
+        td.num { text-align: right; font-weight: bold; color: #d9534f; }
+        
+        #nav-btn, #hide-list-btn {
+            background-color: #6c757d;
+            margin-top: 15px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        #reset-btn {
+            background-color: #dc3545;
+            margin-top: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="card">
+        <div class="counter-container">
+            <span>めくった回数: <span id="flip-count-display" style="font-weight:bold; color:#007bff;">0</span> 回</span>
+            <button class="small-reset-btn" onclick="resetFlipCount()">カウントリセット</button>
+        </div>
+
+        <div id="word-display" class="word">Word</div>
+        <div id="phrase-display" class="phrase">Phrase</div>
+        
+        <input type="text" id="memo-input" placeholder="自分の考えをメモ（任意）">
+        
+        <div id="meaning-display" class="meaning">意味</div>
+        
+        <button id="show-meaning-btn" onclick="showMeaning()">意味を表示</button>
+        
+        <div class="action-buttons">
+            <button id="unknew-btn" onclick="answer(false)">知らなかった</button>
+            <button id="knew-btn" onclick="answer(true)">知っていた</button>
+        </div>
+        
+        <button id="nav-btn" onclick="showList()">苦手な単語一覧を見る</button>
+    </div>
+
+    <div id="list-view">
+        <h2>苦手単語ランキング</h2>
+        <button id="hide-list-btn" onclick="hideList()">単語帳に戻る</button>
+        <div id="table-container"></div>
+        <button id="reset-btn" onclick="resetWeights()">すべての比重をリセット</button>
+    </div>
+
+    <script src="words.js"></script>
+    <script>
+        let vocabData = [];
+        let currentIndex = -1;
+        let flipCount = 0; // めくった回数を保存する変数
+
+        // 初期化処理
+        function init() {
+            // 単語データの読み込み
+            const savedData = localStorage.getItem('toeicVocab');
+            let savedVocabMap = {};
+            
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                parsedData.forEach(item => {
+                    savedVocabMap[item.id] = item.weight;
+                });
+            }
+
+            vocabData = initialVocab.map(v => {
+                const currentWeight = savedVocabMap[v.id] !== undefined ? savedVocabMap[v.id] : 10;
+                return { ...v, weight: currentWeight };
+            });
+
+            // めくった回数の読み込み
+            const savedCount = localStorage.getItem('toeicFlipCount');
+            if (savedCount) {
+                flipCount = parseInt(savedCount, 10);
+            }
+            updateFlipCountUI();
+
+            nextWord();
+        }
+
+        // めくった回数の表示更新
+        function updateFlipCountUI() {
+            document.getElementById('flip-count-display').innerText = flipCount;
+        }
+
+        // 次の単語を選ぶ
+        function nextWord() {
+            const totalWeight = vocabData.reduce((sum, item) => sum + item.weight, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (let i = 0; i < vocabData.length; i++) {
+                if (random < vocabData[i].weight) {
+                    currentIndex = i;
+                    break;
+                }
+                random -= vocabData[i].weight;
+            }
+
+            updateUI();
+        }
+
+        // 画面の更新
+        function updateUI() {
+            const currentWord = vocabData[currentIndex];
+            document.getElementById('word-display').innerText = currentWord.word;
+            document.getElementById('phrase-display').innerText = currentWord.phrase;
+            document.getElementById('meaning-display').innerText = currentWord.meaning;
+            
+            document.getElementById('memo-input').value = '';
+            
+            document.getElementById('meaning-display').style.display = 'none';
+            document.getElementById('knew-btn').style.display = 'none';
+            document.getElementById('unknew-btn').style.display = 'none';
+            document.getElementById('show-meaning-btn').style.display = 'block';
+        }
+
+        // 意味を表示
+        function showMeaning() {
+            // ここで回数を増やして保存
+            flipCount++;
+            localStorage.setItem('toeicFlipCount', flipCount);
+            updateFlipCountUI();
+
+            document.getElementById('meaning-display').style.display = 'block';
+            document.getElementById('show-meaning-btn').style.display = 'none';
+            document.getElementById('knew-btn').style.display = 'block';
+            document.getElementById('unknew-btn').style.display = 'block';
+        }
+
+        // 回答処理
+        function answer(isKnown) {
+            if (isKnown) {
+                vocabData[currentIndex].weight = Math.max(1, vocabData[currentIndex].weight - 1);
+            } else {
+                vocabData[currentIndex].weight += 2;
+            }
+
+            localStorage.setItem('toeicVocab', JSON.stringify(vocabData));
+            nextWord();
+        }
+
+        // めくった回数のリセット
+        function resetFlipCount() {
+            if (confirm("めくった回数を0にリセットする？")) {
+                flipCount = 0;
+                localStorage.setItem('toeicFlipCount', flipCount);
+                updateFlipCountUI();
+            }
+        }
+
+        // 一覧画面の表示
+        function showList() {
+            document.getElementById('card').style.display = 'none';
+            document.getElementById('list-view').style.display = 'block';
+
+            const sortedVocab = [...vocabData].sort((a, b) => b.weight - a.weight);
+
+            let html = '<table><tr><th>単語</th><th>意味</th><th>比重</th></tr>';
+            sortedVocab.forEach(item => {
+                html += `<tr>
+                            <td>${item.word}</td>
+                            <td>${item.meaning}</td>
+                            <td class="num">${item.weight}</td>
+                         </tr>`;
+            });
+            html += '</table>';
+
+            document.getElementById('table-container').innerHTML = html;
+        }
+
+        // 一覧画面を隠す
+        function hideList() {
+            document.getElementById('list-view').style.display = 'none';
+            document.getElementById('card').style.display = 'flex';
+        }
+
+        // 比重のリセット
+        function resetWeights() {
+            if (confirm("すべての単語の比重を初期値に戻す？\nこの操作は取り消せないぞ。")) {
+                vocabData = vocabData.map(v => ({ ...v, weight: 10 }));
+                localStorage.setItem('toeicVocab', JSON.stringify(vocabData));
+                showList(); // テーブルを再描画
+                nextWord(); // 次の単語を再抽選
+            }
+        }
+
+        // 起動処理
+        window.onload = init;
+    </script>
+</body>
+</html>
